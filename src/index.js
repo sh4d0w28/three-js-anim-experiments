@@ -22,9 +22,10 @@ let camera, scene, renderer
 let world
 let modelReady = false
 let mixer
-let animationAction
 
-let animactions = []
+
+let animactions = {}
+let activeAnim = 'head_side_side';
 
 
 let keyboard = new KeyboardState();
@@ -40,6 +41,14 @@ initThree()
 initCannon()
 addObjects();
 animate()
+
+function doAnim(anim = 'head_side_side') {
+  if(activeAnim != anim) {
+    animactions[activeAnim].stop();
+    activeAnim = anim;
+    animactions[anim].play();
+  }
+}
 
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -80,21 +89,24 @@ function addObjects() {
     //object.rotateZ(Math.PI/2);
     mixer = new THREE.AnimationMixer(object)
     // debugger;
-    animactions.push(mixer.clipAction(object.animations[8]));
-    animactions.push(mixer.clipAction(object.animations[3]));
+    object.animations.forEach((a) => {
+      let aname = a.name.split('|')[1];
+      animactions[aname] = mixer.clipAction(a);
+      console.log('found ' + aname);
+    });
 
     lion = object;
     scene.add( lion );
     modelReady = true;
-    animactions[0].play()
+    animactions['head_side_side'].play()
 
     const lionShape = new CANNON.Sphere(1);
-    let lionBody = new CANNON.Body({mass:1, angularFactor:new Vec3(0,0,1)});
+    let lionBody = new CANNON.Body({mass:1});
     lionBody.addShape(lionShape)
     lionBody.position.set(0,0,10);
     world.addBody(lionBody);
     player = lionBody;
-    physicsObjects.push({three: lion, cannon:lionBody});
+    physicsObjects.push({three: lion, cannon:lionBody, skipRotation: true});
 
   }, undefined, function ( error ) {
     console.error( error );
@@ -103,11 +115,11 @@ function addObjects() {
   const hemilight = new THREE.HemisphereLight({skyColor: 0xfefefe});
   scene.add(hemilight);
 
-  createStaticBox(10,10,0.5,0,0,0);
-  createStaticBox(10,0.5,3,0,5,2);
-  createStaticBox(10,0.5,3,0,-5,2);
-  createStaticBox(0.5,10,3,5,0,2);
-  createStaticBox(0.5,10,3,-5,0,2);
+  createStaticBox(20,20,0.1,0,0,0,'#ffffff','floor');
+  createStaticBox(20,0.1,3,0,10,1.5,'#f90000','wall1');
+  createStaticBox(20,0.1,3,0,-10,1.5,'#00f900','wall2');
+  createStaticBox(0.1,20,3,10,0,1.5,'#0000f9','wall3');
+  createStaticBox(0.1,20,3,-10,0,1.5,'#333333','wall4');
 }
 
 
@@ -124,23 +136,24 @@ function animate() {
   renderer.render(scene, camera)
 
   if ( keyboard.pressed("D") ) {
+    doAnim('walk_left');
     player.force = new Vec3(9,0,0);
   }
   if ( keyboard.pressed("A") ) {
+    doAnim('walk_left');
     player.force = new Vec3(-9,0,0);
   }
   if ( keyboard.pressed("W") )  {
-    animactions[0].stop();
-    animactions[1].play();
+    doAnim('walk_forward.001');
     player.force = new Vec3(0,9,0);
   }
   if ( keyboard.pressed("S") )  {
+    doAnim('walk_forward.001');
     player.force = new Vec3(0,-9,0);
   }
   
   if(keyboard.up("W")) {
-    animactions[0].play();
-    animactions[1].stop()
+    doAnim('head_side_side');
   }
 
   keyboard.update()
@@ -150,7 +163,9 @@ function syncPhysicsObjects() {
     physicsObjects.forEach((po) => {
         try {
           po.three.position.copy(po.cannon.position);
-          po.three.quaternion.copy(po.cannon.quaternion);
+          if(!po.skipRotation) {
+            po.three.quaternion.copy(po.cannon.quaternion);
+          }
         } catch (e) {
           console.error(po);
           debugger;
@@ -158,8 +173,8 @@ function syncPhysicsObjects() {
     });
 }
 
-function createStaticBox(gx,gy,gz,x,y,z) {
-  const material = new THREE.MeshPhongMaterial({ color: 0x333333, wireframe: true });
+function createStaticBox(gx,gy,gz,x,y,z,color="0x333333", name = '') {
+  const material = new THREE.MeshPhongMaterial({ color: color, wireframe: true });
   const geometry = new THREE.BoxGeometry(gx,gy,gz);
   let mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
@@ -170,5 +185,5 @@ function createStaticBox(gx,gy,gz,x,y,z) {
   cannonBody.position.set(x,y,z);
   world.addBody(cannonBody);
 
-  physicsObjects.push({three: mesh, cannon:cannonBody});
+  physicsObjects.push({three: mesh, cannon:cannonBody, name: name});
 }
